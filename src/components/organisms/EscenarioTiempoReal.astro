@@ -1,0 +1,24 @@
+---
+import CabeceraEscena from './CabeceraEscena.astro';
+import cursoresScript from '../../scripts/cursores.js?url';
+---
+
+<section id="pantallaDirecto" class="mx-auto hidden max-w-6xl px-4 pb-10 pt-8">
+  <div class="overflow-hidden rounded-[30px] border border-white/10 bg-[#0b1120] shadow-[0_20px_60px_rgba(2,8,23,0.4)]">
+    <CabeceraEscena />
+
+    <div id="escenaCursores" class="escena-cursor relative h-[76vh] min-h-[500px] overflow-hidden bg-[#020617]">
+      <div class="capa-estrellas absolute inset-0"></div>
+      <svg id="capaLineas" class="absolute inset-0 h-full w-full"></svg>
+      <div id="capaPulso" class="absolute inset-0"></div>
+      <div id="capaCursores" class="absolute inset-0"></div>
+      <div class="pointer-events-none absolute inset-x-4 bottom-4 flex justify-center">
+        <div class="rounded-full border border-white/10 bg-slate-950 px-4 py-2 text-xs text-slate-400">
+          Acércate a otros usuarios para activar conexiones de proximidad.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script type="module" src={cursoresScript}></script>

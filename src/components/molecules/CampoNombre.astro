@@ -1,0 +1,15 @@
+---
+import EtiquetaCampo from '../atoms/EtiquetaCampo.astro';
+import InputTexto from '../atoms/InputTexto.astro';
+---
+
+<div>
+  <EtiquetaCampo htmlFor="nombreUsuario" texto="Nombre de usuario" />
+  <InputTexto
+    id="nombreUsuario"
+    name="nombreUsuario"
+    placeholder="Escribe tu nombre"
+    value="Invitado"
+    maxlength={18}
+  />
+</div>

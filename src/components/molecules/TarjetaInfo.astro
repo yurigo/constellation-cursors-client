@@ -1,0 +1,18 @@
+---
+import TituloSeccion from '../atoms/TituloSeccion.astro';
+import SubtituloTexto from '../atoms/SubtituloTexto.astro';
+
+interface Props {
+  titulo: string;
+  texto: string;
+}
+
+const { titulo, texto } = Astro.props;
+---
+
+<article class="rounded-[26px] border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+  <TituloSeccion etiqueta="h3" texto={titulo} />
+  <div class="mt-2">
+    <SubtituloTexto texto={texto} />
+  </div>
+</article>

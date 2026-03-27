@@ -1,0 +1,14 @@
+---
+interface Props {
+  id?: string;
+  etiqueta: string;
+  valor: string;
+}
+
+const { id, etiqueta, valor } = Astro.props;
+---
+
+<div class="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3">
+  <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">{etiqueta}</p>
+  <p id={id} class="mt-1 text-lg font-semibold text-white">{valor}</p>
+</div>

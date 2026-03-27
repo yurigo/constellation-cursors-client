@@ -1,0 +1,12 @@
+---
+interface Props {
+  texto: string;
+  centrado?: boolean;
+}
+
+const { texto, centrado = false } = Astro.props;
+---
+
+<p class:list={['max-w-3xl text-sm leading-6 text-slate-300 md:text-base', centrado && 'text-center mx-auto']}>
+  {texto}
+</p>

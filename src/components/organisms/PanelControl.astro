@@ -1,0 +1,20 @@
+---
+import BotonPrimario from '../atoms/BotonPrimario.astro';
+import CampoNombre from '../molecules/CampoNombre.astro';
+import IndicadorDato from '../molecules/IndicadorDato.astro';
+---
+
+<section class="mx-auto mt-6 max-w-6xl px-4">
+  <div class="grid gap-4 rounded-[30px] border border-white/10 bg-slate-950/45 p-5 backdrop-blur-sm lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+    <div class="grid gap-4 md:grid-cols-[1.3fr_auto] md:items-end">
+      <CampoNombre />
+      <BotonPrimario id="botonEntrar" texto="Entrar en la constelación" />
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-3">
+      <IndicadorDato id="contadorUsuarios" etiqueta="Usuarios online" valor="0" />
+      <IndicadorDato id="miColor" etiqueta="Tu color" valor="--" />
+      <IndicadorDato id="miEstado" etiqueta="Tu estado" valor="Esperando" />
+    </div>
+  </div>
+</section>

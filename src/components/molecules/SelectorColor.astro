@@ -1,0 +1,27 @@
+---
+import EtiquetaCampo from '../atoms/EtiquetaCampo.astro';
+import MuestraColor from '../atoms/MuestraColor.astro';
+
+const coloresDisponibles = ['#38bdf8', '#f472b6', '#a78bfa', '#34d399', '#f59e0b', '#fb7185', '#22d3ee', '#fde047'];
+---
+
+<div>
+  <EtiquetaCampo htmlFor="colorUsuario" texto="Color de tu estrella" />
+
+  <div class="grid grid-cols-4 gap-3 sm:grid-cols-8">
+    {coloresDisponibles.map((color, indice) => (
+      <label class="flex cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-slate-950/70 p-3 transition hover:border-white/20">
+        <input
+          type="radio"
+          name="colorUsuario"
+          value={color}
+          checked={indice === 0}
+          class="peer sr-only"
+        />
+        <div class="peer-checked:scale-105">
+          <MuestraColor color={color} />
+        </div>
+      </label>
+    ))}
+  </div>
+</div>

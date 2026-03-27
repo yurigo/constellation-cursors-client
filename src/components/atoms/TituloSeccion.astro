@@ -1,0 +1,18 @@
+---
+interface Props {
+  texto: string;
+  etiqueta?: keyof HTMLElementTagNameMap;
+  centrado?: boolean;
+}
+
+const { texto, etiqueta = 'h1', centrado = false } = Astro.props;
+const Tag = etiqueta;
+---
+
+<Tag class:list={[
+  'font-semibold tracking-tight text-white',
+  etiqueta === 'h1' ? 'text-4xl md:text-6xl' : 'text-xl md:text-2xl',
+  centrado && 'text-center'
+]}>
+  {texto}
+</Tag>

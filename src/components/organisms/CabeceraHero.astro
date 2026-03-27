@@ -1,0 +1,24 @@
+---
+import BadgeEstado from '../atoms/BadgeEstado.astro';
+import TituloSeccion from '../atoms/TituloSeccion.astro';
+import SubtituloTexto from '../atoms/SubtituloTexto.astro';
+---
+
+<section class="mx-auto max-w-6xl px-4 pt-8 md:pt-12">
+  <div class="rounded-[34px] border border-white/10 bg-white/5 p-6 backdrop-blur-sm md:p-8">
+    <div class="mb-5 flex flex-wrap items-center gap-3">
+      <BadgeEstado id="estadoConexion" texto="Conectando con el servidor" />
+      <span class="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-300">
+        AC7 · Socket.IO · Astro · Tiempo real
+      </span>
+    </div>
+
+    <TituloSeccion texto="Constellation Cursors" />
+
+    <div class="mt-4">
+      <SubtituloTexto
+        texto="Una experiencia de cursores compartidos en tiempo real donde cada persona aparece como una partícula luminosa con nombre, color propio y movimiento suave. Cuando varios usuarios se acercan entre sí, el espacio reacciona con conexiones visuales y pequeños pulsos de energía."
+      />
+    </div>
+  </div>
+</section>
