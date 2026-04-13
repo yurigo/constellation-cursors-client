@@ -1,6 +1,5 @@
 ---
 import CabeceraEscena from './CabeceraEscena.astro';
-import cursoresScript from '../../scripts/cursores.js?url';
 ---
 
 <section id="pantallaDirecto" class="mx-auto hidden max-w-6xl px-4 pb-10 pt-8">
@@ -21,4 +20,513 @@ import cursoresScript from '../../scripts/cursores.js?url';
   </div>
 </section>
 
-<script type="module" src={cursoresScript}></script>
+<script>
+import { io } from 'socket.io-client';
+
+const urlSocket = import.meta.env.PUBLIC_SOCKET_URL || 'http://localhost:3000';
+const socket = io(urlSocket, {
+  transports: ['websocket'],
+});
+
+const pantallaAcceso = document.querySelector('#pantallaAcceso');
+const pantallaDirecto = document.querySelector('#pantallaDirecto');
+const escena = document.querySelector('#escenaCursores');
+const capaCursores = document.querySelector('#capaCursores');
+const capaLineas = document.querySelector('#capaLineas');
+const capaPulso = document.querySelector('#capaPulso');
+const inputNombre = document.querySelector('#nombreUsuario');
+const botonEntrar = document.querySelector('#botonEntrar');
+const botonVolver = document.querySelector('#botonVolver');
+const estadoConexion = document.querySelector('#estadoConexion');
+const contadorUsuarios = document.querySelector('#contadorUsuarios');
+const vistaPreviaNombre = document.querySelector('#vistaPreviaNombre');
+const vistaPreviaColor = document.querySelector('#vistaPreviaColor');
+const vistaPreviaEstrella = document.querySelector('#vistaPreviaEstrella');
+const inputsColor = Array.from(document.querySelectorAll('input[name="colorUsuario"]'));
+
+const cursores = new Map();
+const pulsosActivos = new Map();
+const conexionesActivas = new Set();
+const distanciaConexion = 150;
+const intervaloEnvio = 35;
+const intervaloConexiones = 45;
+const tiempoInactividad = 2200;
+const coloresDisponibles = ['#38bdf8', '#f472b6', '#a78bfa', '#34d399', '#f59e0b', '#fb7185', '#22d3ee', '#fde047'];
+
+let datosLocales = {
+  id: null,
+  nombre: 'Invitado',
+  color: coloresDisponibles[0],
+  x: 160,
+  y: 160,
+  xObjetivo: 160,
+  yObjetivo: 160,
+  ultimaActividad: Date.now(),
+  estado: 'activo',
+};
+
+let haEntrado = false;
+let ultimoEnvio = 0;
+let ultimoPintadoConexiones = 0;
+
+function limitarNombre(nombre) {
+  return (nombre || 'Invitado').trim().slice(0, 18) || 'Invitado';
+}
+
+function actualizarTextoConexion(texto, color = 'bg-emerald-400') {
+  if (!estadoConexion) {
+    return;
+  }
+
+  estadoConexion.innerHTML = `
+    <span class="h-2.5 w-2.5 rounded-full ${color} shadow-[0_0_14px_rgba(74,222,128,0.8)]"></span>
+    <span>${texto}</span>
+  `;
+}
+
+function obtenerColorSeleccionado() {
+  const inputSeleccionado = inputsColor.find((input) => input.checked);
+  return inputSeleccionado?.value || coloresDisponibles[0];
+}
+
+function actualizarVistaPrevia() {
+  const nombre = limitarNombre(inputNombre?.value);
+  const color = obtenerColorSeleccionado();
+
+  if (vistaPreviaNombre) {
+    vistaPreviaNombre.textContent = nombre;
+  }
+
+  if (vistaPreviaColor) {
+    vistaPreviaColor.textContent = color;
+    vistaPreviaColor.style.color = color;
+  }
+
+  if (vistaPreviaEstrella) {
+    vistaPreviaEstrella.innerHTML = `
+      <div class="absolute h-14 w-14 rounded-full opacity-30 blur-2xl" style="background:${color};"></div>
+      <div class="relative h-4 w-4 rounded-full border border-white/70 shadow-[0_0_24px_rgba(255,255,255,0.35)]" style="background:${color};"></div>
+    `;
+  }
+
+  inputsColor.forEach((input) => {
+    const contenedor = input.closest('label');
+    if (!contenedor) {
+      return;
+    }
+
+    if (input.checked) {
+      contenedor.classList.add('border-white/30', 'bg-white/10');
+      contenedor.classList.remove('border-white/10', 'bg-slate-950/70');
+    } else {
+      contenedor.classList.remove('border-white/30', 'bg-white/10');
+      contenedor.classList.add('border-white/10', 'bg-slate-950/70');
+    }
+  });
+}
+
+function mostrarPantallaAcceso() {
+  pantallaAcceso?.classList.remove('hidden');
+  pantallaDirecto?.classList.add('hidden');
+}
+
+function mostrarPantallaDirecto() {
+  pantallaAcceso?.classList.add('hidden');
+  pantallaDirecto?.classList.remove('hidden');
+}
+
+function obtenerTamanoEscena() {
+  const rectangulo = escena.getBoundingClientRect();
+  return {
+    ancho: rectangulo.width,
+    alto: rectangulo.height,
+  };
+}
+
+function limitarPosicion(x, y) {
+  const { ancho, alto } = obtenerTamanoEscena();
+
+  return {
+    x: Math.max(18, Math.min(x, ancho - 18)),
+    y: Math.max(18, Math.min(y, alto - 18)),
+  };
+}
+
+function obtenerCursor(id) {
+  let cursor = cursores.get(id);
+
+  if (cursor) {
+    return cursor;
+  }
+
+  const elemento = document.createElement('div');
+  elemento.className = 'pointer-events-none absolute left-0 top-0 will-change-transform';
+  elemento.innerHTML = `
+    <div class="relative -translate-x-1/2 -translate-y-1/2">
+      <div class="rastro absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-35 blur-xl"></div>
+      <div class="nucleo h-4 w-4 rounded-full border border-white/70 shadow-[0_0_24px_rgba(255,255,255,0.35)]"></div>
+      <div class="nombre absolute left-1/2 top-[-18px] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-slate-950/85 px-2 py-1 text-[11px] text-white backdrop-blur-sm"></div>
+      <div class="cola absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-20 blur-2xl"></div>
+    </div>
+  `;
+
+  capaCursores.appendChild(elemento);
+
+  cursor = {
+    id,
+    elemento,
+    etiquetaNombre: elemento.querySelector('.nombre'),
+    nucleo: elemento.querySelector('.nucleo'),
+    rastro: elemento.querySelector('.rastro'),
+    cola: elemento.querySelector('.cola'),
+    x: 0,
+    y: 0,
+    xObjetivo: 0,
+    yObjetivo: 0,
+    color: coloresDisponibles[0],
+    nombre: 'Invitado',
+    ultimaActividad: Date.now(),
+    estado: 'activo',
+  };
+
+  cursores.set(id, cursor);
+  return cursor;
+}
+
+function aplicarAparienciaCursor(cursor) {
+  cursor.nucleo.style.background = cursor.color;
+  cursor.rastro.style.background = cursor.color;
+  cursor.cola.style.background = cursor.color;
+  cursor.etiquetaNombre.textContent = cursor.nombre;
+  cursor.elemento.style.opacity = cursor.estado === 'inactivo' ? '0.45' : '1';
+}
+
+function actualizarCursorConDatos(id, datos) {
+  const cursor = obtenerCursor(id);
+  cursor.nombre = limitarNombre(datos.nombre);
+  cursor.color = datos.color || coloresDisponibles[0];
+  cursor.xObjetivo = Number(datos.x) || 0;
+  cursor.yObjetivo = Number(datos.y) || 0;
+  cursor.ultimaActividad = datos.ultimaActividad || Date.now();
+  cursor.estado = datos.estado || 'activo';
+
+  if (cursor.x === 0 && cursor.y === 0) {
+    cursor.x = cursor.xObjetivo;
+    cursor.y = cursor.yObjetivo;
+  }
+
+  aplicarAparienciaCursor(cursor);
+}
+
+function borrarCursor(id) {
+  const cursor = cursores.get(id);
+  if (!cursor) {
+    return;
+  }
+
+  cursor.elemento.remove();
+  cursores.delete(id);
+}
+
+function limpiarEscena() {
+  cursores.forEach((cursor) => cursor.elemento.remove());
+  cursores.clear();
+  if (capaLineas) {
+    capaLineas.innerHTML = '';
+  }
+  if (capaPulso) {
+    capaPulso.innerHTML = '';
+  }
+  pulsosActivos.clear();
+  conexionesActivas.clear();
+}
+
+function prepararEntrada() {
+  datosLocales.nombre = limitarNombre(inputNombre?.value);
+  datosLocales.color = obtenerColorSeleccionado();
+  datosLocales.ultimaActividad = Date.now();
+  datosLocales.estado = 'activo';
+}
+
+function enviarEntrada() {
+  prepararEntrada();
+  haEntrado = true;
+  mostrarPantallaDirecto();
+
+  socket.emit('usuario:entrar', {
+    nombre: datosLocales.nombre,
+    color: datosLocales.color,
+    x: datosLocales.x,
+    y: datosLocales.y,
+    ultimaActividad: datosLocales.ultimaActividad,
+    estado: datosLocales.estado,
+  });
+}
+
+function salirDeLaConstelacion() {
+  if (haEntrado) {
+    socket.emit('usuario:abandonar');
+  }
+
+  haEntrado = false;
+  limpiarEscena();
+  mostrarPantallaAcceso();
+}
+
+function enviarMovimiento(forzado = false) {
+  if (!haEntrado) {
+    return;
+  }
+
+  const ahora = Date.now();
+  if (!forzado && ahora - ultimoEnvio < intervaloEnvio) {
+    return;
+  }
+
+  ultimoEnvio = ahora;
+  datosLocales.ultimaActividad = ahora;
+  datosLocales.estado = 'activo';
+
+  socket.emit('cursor:mover', {
+    x: datosLocales.xObjetivo,
+    y: datosLocales.yObjetivo,
+    ultimaActividad: datosLocales.ultimaActividad,
+    estado: datosLocales.estado,
+  });
+}
+
+function gestionarMovimiento(evento) {
+  if (!escena || !haEntrado) {
+    return;
+  }
+
+  const rectangulo = escena.getBoundingClientRect();
+  const posicion = limitarPosicion(evento.clientX - rectangulo.left, evento.clientY - rectangulo.top);
+
+  datosLocales.xObjetivo = posicion.x;
+  datosLocales.yObjetivo = posicion.y;
+  enviarMovimiento();
+}
+
+function gestionarSalidaEscena() {
+  if (!haEntrado) {
+    return;
+  }
+
+  datosLocales.estado = 'inactivo';
+  socket.emit('cursor:mover', {
+    x: datosLocales.xObjetivo,
+    y: datosLocales.yObjetivo,
+    ultimaActividad: Date.now(),
+    estado: 'inactivo',
+  });
+}
+
+function crearPulso(x, y, color) {
+  const clave = `${Math.round(x / 14)}-${Math.round(y / 14)}-${color}`;
+  const ahora = Date.now();
+
+  if (pulsosActivos.has(clave) && ahora - pulsosActivos.get(clave) < 420) {
+    return;
+  }
+
+  pulsosActivos.set(clave, ahora);
+
+  const pulso = document.createElement('div');
+  pulso.className = 'pointer-events-none pulso-colision absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border';
+  pulso.style.left = `${x}px`;
+  pulso.style.top = `${y}px`;
+  pulso.style.borderColor = color;
+  pulso.style.boxShadow = `0 0 16px ${color}`;
+
+  capaPulso.appendChild(pulso);
+  setTimeout(() => {
+    pulso.remove();
+    pulsosActivos.delete(clave);
+  }, 520);
+}
+
+function dibujarConexiones() {
+  if (!capaLineas || !haEntrado) {
+    return;
+  }
+
+  const ids = Array.from(cursores.keys());
+  const lineas = [];
+  const conexionesVisibles = new Set();
+
+  for (let i = 0; i < ids.length; i += 1) {
+    for (let j = i + 1; j < ids.length; j += 1) {
+      const estrellaA = cursores.get(ids[i]);
+      const estrellaB = cursores.get(ids[j]);
+
+      if (!estrellaA || !estrellaB) {
+        continue;
+      }
+
+      const distancia = Math.hypot(estrellaA.x - estrellaB.x, estrellaA.y - estrellaB.y);
+      if (distancia > distanciaConexion) {
+        continue;
+      }
+
+      const opacidad = Math.max(0.08, 1 - distancia / distanciaConexion);
+      const claveConexion = [estrellaA.id, estrellaB.id].sort().join('-');
+      conexionesVisibles.add(claveConexion);
+
+      lineas.push(`
+        <line
+          x1="${estrellaA.x}"
+          y1="${estrellaA.y}"
+          x2="${estrellaB.x}"
+          y2="${estrellaB.y}"
+          stroke="${estrellaA.color}"
+          stroke-width="1.25"
+          stroke-opacity="${opacidad}"
+        />
+      `);
+
+      if (distancia < 42 && !conexionesActivas.has(claveConexion)) {
+        conexionesActivas.add(claveConexion);
+        crearPulso((estrellaA.x + estrellaB.x) / 2, (estrellaA.y + estrellaB.y) / 2, estrellaA.color);
+      }
+
+      if (distancia >= 42 && conexionesActivas.has(claveConexion)) {
+        conexionesActivas.delete(claveConexion);
+      }
+    }
+  }
+
+  conexionesActivas.forEach((clave) => {
+    if (!conexionesVisibles.has(clave)) {
+      conexionesActivas.delete(clave);
+    }
+  });
+
+  capaLineas.innerHTML = lineas.join('');
+}
+
+function animar() {
+  const ahora = Date.now();
+
+  cursores.forEach((cursor) => {
+    cursor.x += (cursor.xObjetivo - cursor.x) * 0.18;
+    cursor.y += (cursor.yObjetivo - cursor.y) * 0.18;
+
+    if (ahora - cursor.ultimaActividad > tiempoInactividad) {
+      cursor.estado = 'inactivo';
+    }
+
+    aplicarAparienciaCursor(cursor);
+    cursor.elemento.style.transform = `translate(${cursor.x}px, ${cursor.y}px)`;
+  });
+
+  if (haEntrado) {
+    datosLocales.x += (datosLocales.xObjetivo - datosLocales.x) * 0.18;
+    datosLocales.y += (datosLocales.yObjetivo - datosLocales.y) * 0.18;
+
+    if (ahora - datosLocales.ultimaActividad > tiempoInactividad) {
+      datosLocales.estado = 'inactivo';
+    }
+
+    actualizarCursorConDatos(socket.id, datosLocales);
+
+    if (ahora - ultimoPintadoConexiones >= intervaloConexiones) {
+      ultimoPintadoConexiones = ahora;
+      dibujarConexiones();
+    }
+  }
+
+  requestAnimationFrame(animar);
+}
+
+botonEntrar?.addEventListener('click', () => {
+  enviarEntrada();
+  inputNombre?.blur();
+});
+
+botonVolver?.addEventListener('click', () => {
+  salirDeLaConstelacion();
+});
+
+inputNombre?.addEventListener('input', actualizarVistaPrevia);
+inputNombre?.addEventListener('keydown', (evento) => {
+  if (evento.key === 'Enter') {
+    enviarEntrada();
+    inputNombre.blur();
+  }
+});
+
+inputsColor.forEach((input) => {
+  input.addEventListener('change', actualizarVistaPrevia);
+});
+
+escena?.addEventListener('mousemove', gestionarMovimiento);
+escena?.addEventListener('mouseleave', gestionarSalidaEscena);
+window.addEventListener('resize', () => {
+  if (!haEntrado) {
+    return;
+  }
+
+  const posicion = limitarPosicion(datosLocales.xObjetivo, datosLocales.yObjetivo);
+  datosLocales.xObjetivo = posicion.x;
+  datosLocales.yObjetivo = posicion.y;
+  enviarMovimiento(true);
+});
+
+socket.on('connect', () => {
+  datosLocales.id = socket.id;
+  actualizarTextoConexion('Conectado al servidor en tiempo real');
+});
+
+socket.on('connect_error', () => {
+  actualizarTextoConexion('No se pudo conectar con el servidor', 'bg-rose-400');
+});
+
+socket.on('disconnect', () => {
+  actualizarTextoConexion('Sin conexión con el servidor', 'bg-rose-400');
+  limpiarEscena();
+});
+
+socket.on('usuarios:estado', (usuarios) => {
+  if (!Array.isArray(usuarios)) {
+    return;
+  }
+
+  usuarios.forEach((usuario) => {
+    if (!usuario?.id) {
+      return;
+    }
+    actualizarCursorConDatos(usuario.id, usuario);
+  });
+});
+
+socket.on('usuario:entro', (usuario) => {
+  if (!usuario?.id) {
+    return;
+  }
+  actualizarCursorConDatos(usuario.id, usuario);
+});
+
+socket.on('cursor:actualizar', (usuario) => {
+  if (!usuario?.id) {
+    return;
+  }
+  actualizarCursorConDatos(usuario.id, usuario);
+});
+
+socket.on('usuario:salio', ({ id }) => {
+  borrarCursor(id);
+});
+
+socket.on('usuarios:contador', ({ total }) => {
+  if (contadorUsuarios) {
+    contadorUsuarios.textContent = String(total || 0);
+  }
+});
+
+actualizarVistaPrevia();
+mostrarPantallaAcceso();
+actualizarTextoConexion('Conectando con el servidor');
+animar();
+
+</script>
